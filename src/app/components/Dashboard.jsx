@@ -48,62 +48,28 @@ export function Dashboard({ user: initialUser, onLogout }) {
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [searchQuery, filterCategory, filterLocation, sortOrder, activeTab]);
 
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const [lostResponse, foundResponse] = await Promise.all([
-        fetch('http://localhost:3000/api/lost'),
-        fetch('http://localhost:3000/api/found')
-      ]);
+      
+      const params = new URLSearchParams({
+        search: searchQuery,
+        category: filterCategory,
+        location: filterLocation,
+        sort: sortOrder,
+        type: activeTab,
+        userId: user.id
+      });
 
-      const lostData = await lostResponse.json();
-      const foundData = await foundResponse.json();
-
-      // Transform lost reports
-      const lostReports = lostData.map(report => ({
-        id: `lost-${report.lost_id}`,
-        dbId: report.lost_id,
-        type: 'lost',
-        userId: report.creator_id,
-        userName: report.user_name,
-        userEmail: report.user_email,
-        userStudentId: report.user_student_id,
-        userContactNumber: report.user_contact_number,
-        itemName: report.title,
-        description: report.description,
-        category: report.tags?.[0] || 'Other',
-        location: report.location_name,
-        date: report.lost_at,
-        status: report.status,
-        imageUrl: report.image_urls?.[0] || null,
-        imageUrls: report.image_urls || [],
-        tags: report.tags || []
-      }));
-
-      // Transform found reports
-      const foundReports = foundData.map(report => ({
-        id: `found-${report.found_id}`,
-        dbId: report.found_id,
-        type: 'found',
-        userId: report.creator_id,
-        userName: report.user_name,
-        userEmail: report.user_email,
-        userStudentId: report.user_student_id,
-        userContactNumber: report.user_contact_number,
-        itemName: report.title,
-        description: report.description,
-        category: report.tags?.[0] || 'Other',
-        location: report.location_name,
-        date: report.found_at,
-        status: report.status,
-        imageUrl: report.image_urls?.[0] || null,
-        imageUrls: report.image_urls || [],
-        tags: report.tags || []
-      }));
-
-      setReports([...lostReports, ...foundReports]);
+      const response = await fetch(`http://localhost:3000/api/dashboard?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data');
+      }
+      
+      const data = await response.json();
+      setReports(data);
     } catch (error) {
       console.error('Error fetching reports:', error);
       toast.error('Failed to load reports');
@@ -122,43 +88,13 @@ export function Dashboard({ user: initialUser, onLogout }) {
   const handleArchiveItem = (itemId) => {
     // Remove the archived item from the current view
     setReports(prevReports => 
-      prevReports.map(report => 
-        report.id === itemId 
-          ? { ...report, status: 'archived' }
-          : report
-      )
+      prevReports.filter(report => report.id !== itemId)
     );
   };
 
 
-  // Filter and sort reports
-  const filteredReports = reports
-    .filter((report) => {
-      const matchesSearch =
-        (report.itemName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (report.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = filterCategory === "all" || report.category === filterCategory;
-      const matchesLocation = filterLocation === "all" || report.location === filterLocation;
-      const matchesTab =
-        activeTab === "all" ||
-        (activeTab === "my-reports" && report.userId === user.id) ||
-        (activeTab === "lost" && report.type === "lost") ||
-        (activeTab === "found" && report.type === "found");
-
-      // Exclude archived items from all tabs
-      const isNotArchived = report.status !== "archived";
-
-      return matchesSearch && matchesCategory && matchesLocation && matchesTab && isNotArchived;
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.date);
-      const dateB = new Date(b.date);
-      if (sortOrder === "newest") {
-        return dateB - dateA;
-      } else {
-        return dateA - dateB;
-      }
-    });
+  // Filter and sort reports are now handled by the database function
+  const filteredReports = reports;
 
   const categories = [
     "Electronics",

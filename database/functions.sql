@@ -498,7 +498,8 @@ RETURNS TABLE (
     description TEXT,
     category TEXT,
     location_name VARCHAR(100),
-    reported_at TIMESTAMP WITH TIME ZONE,
+    reported_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ,
     status TEXT,
     image_url TEXT,
     image_urls TEXT[],
@@ -506,76 +507,133 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    WITH combined_reports AS (
+    SELECT 
+        res.res_id,
+        res.res_db_id,
+        res.res_report_type,
+        res.res_creator_id,
+        res.res_user_name,
+        res.res_user_email,
+        res.res_user_student_id,
+        res.res_user_contact_number,
+        res.res_title,
+        res.res_description,
+        res.res_category,
+        res.res_location_name,
+        res.res_reported_at,
+        res.res_created_at,
+        res.res_status,
+        res.res_image_url,
+        res.res_image_urls,
+        res.res_tags
+    FROM (
         -- LOST REPORTS
         SELECT
-            'lost-' || lr.lost_id AS id,
-            lr.lost_id AS db_id,
-            'lost'::TEXT AS report_type,
-            lr.creator_id,
-            u.name::TEXT AS user_name,
-            a.email AS user_email,
-            u.student_id AS user_student_id,
-            u.contact_number AS user_contact_number,
-            lr.title,
-            lr.description,
-            (SELECT t.name FROM Tags t JOIN Lost_Report_Tags lrt ON t.tag_id = lrt.category_id WHERE lrt.lost_id = lr.lost_id LIMIT 1)::TEXT AS category,
-            l.name::TEXT AS location_name,
-            lr.lost_at AT TIME ZONE 'UTC' AS reported_at,
-            lr.status::TEXT AS status,
-            (SELECT lri.image_url FROM Lost_Report_Images lri WHERE lri.lost_id = lr.lost_id ORDER BY lri.image_id LIMIT 1) AS image_url,
-            ARRAY(SELECT lri.image_url FROM Lost_Report_Images lri WHERE lri.lost_id = lr.lost_id) AS image_urls,
-            ARRAY(SELECT t.name FROM Tags t JOIN Lost_Report_Tags lrt ON t.tag_id = lrt.category_id WHERE lrt.lost_id = lr.lost_id)::TEXT[] AS tags
+            ('lost-' || lr.lost_id)::TEXT AS res_id,
+            lr.lost_id::INT AS res_db_id,
+            'lost'::TEXT AS res_report_type,
+            lr.creator_id::INT AS res_creator_id,
+            u.name::TEXT AS res_user_name,
+            a.email::VARCHAR(255) AS res_user_email,
+            u.student_id::NUMERIC(9, 0) AS res_user_student_id,
+            u.contact_number::BIGINT AS res_user_contact_number,
+            lr.title::VARCHAR(50) AS res_title,
+            lr.description::TEXT AS res_description,
+            COALESCE((
+                SELECT t.name 
+                FROM Tags t 
+                JOIN Lost_Report_Tags lrt ON t.tag_id = lrt.category_id 
+                WHERE lrt.lost_id = lr.lost_id 
+                LIMIT 1
+            )::TEXT, 'Other'::TEXT) AS res_category,
+            l.name::VARCHAR(100) AS res_location_name,
+            lr.lost_at::TIMESTAMPTZ AS res_reported_at,
+            lr.created_at::TIMESTAMPTZ AS res_created_at,
+            lr.status::TEXT AS res_status,
+            (
+                SELECT lri.image_url 
+                FROM Lost_Report_Images lri 
+                WHERE lri.lost_id = lr.lost_id 
+                ORDER BY lri.image_id LIMIT 1
+            )::TEXT AS res_image_url,
+            ARRAY(
+                SELECT lri.image_url 
+                FROM Lost_Report_Images lri 
+                WHERE lri.lost_id = lr.lost_id
+            )::TEXT[] AS res_image_urls,
+            ARRAY(
+                SELECT t.name 
+                FROM Tags t 
+                JOIN Lost_Report_Tags lrt ON t.tag_id = lrt.category_id 
+                WHERE lrt.lost_id = lr.lost_id
+            )::TEXT[] AS res_tags,
+            lr.status AS raw_status -- For internal filtering
         FROM Lost_Report lr
         JOIN Users u ON lr.creator_id = u.user_id
         JOIN Auth a ON u.user_id = a.user_id
         JOIN Location l ON lr.last_location_id = l.location_id
-        WHERE lr.status != 'archived'
 
         UNION ALL
 
         -- FOUND REPORTS
         SELECT
-            'found-' || fr.found_id AS id,
-            fr.found_id AS db_id,
-            'found'::TEXT AS report_type,
-            fr.creator_id,
-            u.name::TEXT AS user_name,
-            a.email AS user_email,
-            u.student_id AS user_student_id,
-            u.contact_number AS user_contact_number,
-            fr.title,
-            fr.description,
-            (SELECT t.name FROM Tags t JOIN Found_Report_Tags frt ON t.tag_id = frt.category_id WHERE frt.found_id = fr.found_id LIMIT 1)::TEXT AS category,
-            l.name::TEXT AS location_name,
-            fr.found_at AT TIME ZONE 'UTC' AS reported_at,
-            fr.status::TEXT AS status,
-            (SELECT fri.image_url FROM Found_Report_Images fri WHERE fri.found_id = fr.found_id ORDER BY fri.image_id LIMIT 1) AS image_url,
-            ARRAY(SELECT fri.image_url FROM Found_Report_Images fri WHERE fri.found_id = fr.found_id) AS image_urls,
-            ARRAY(SELECT t.name FROM Tags t JOIN Found_Report_Tags frt ON t.tag_id = frt.category_id WHERE frt.found_id = fr.found_id)::TEXT[] AS tags
+            ('found-' || fr.found_id)::TEXT AS res_id,
+            fr.found_id::INT AS res_db_id,
+            'found'::TEXT AS res_report_type,
+            fr.creator_id::INT AS res_creator_id,
+            u.name::TEXT AS res_user_name,
+            a.email::VARCHAR(255) AS res_user_email,
+            u.student_id::NUMERIC(9, 0) AS res_user_student_id,
+            u.contact_number::BIGINT AS res_user_contact_number,
+            fr.title::VARCHAR(50) AS res_title,
+            fr.description::TEXT AS res_description,
+            COALESCE((
+                SELECT t.name 
+                FROM Tags t 
+                JOIN Found_Report_Tags frt ON t.tag_id = frt.category_id 
+                WHERE frt.found_id = fr.found_id 
+                LIMIT 1
+            )::TEXT, 'Other'::TEXT) AS res_category,
+            l.name::VARCHAR(100) AS res_location_name,
+            fr.found_at::TIMESTAMPTZ AS res_reported_at,
+            fr.created_at::TIMESTAMPTZ AS res_created_at,
+            fr.status::TEXT AS res_status,
+            (
+                SELECT fri.image_url 
+                FROM Found_Report_Images fri 
+                WHERE fri.found_id = fr.found_id 
+                ORDER BY fri.image_id LIMIT 1
+            )::TEXT AS res_image_url,
+            ARRAY(
+                SELECT fri.image_url 
+                FROM Found_Report_Images fri 
+                WHERE fri.found_id = fr.found_id
+            )::TEXT[] AS res_image_urls,
+            ARRAY(
+                SELECT t.name 
+                FROM Tags t 
+                JOIN Found_Report_Tags frt ON t.tag_id = frt.category_id 
+                WHERE frt.found_id = fr.found_id
+            )::TEXT[] AS res_tags,
+            fr.status AS raw_status -- For internal filtering
         FROM Found_Report fr
         JOIN Users u ON fr.creator_id = u.user_id
         JOIN Auth a ON u.user_id = a.user_id
         JOIN Location l ON fr.found_location_id = l.location_id
-        WHERE fr.status != 'archived'
-    )
-    SELECT * FROM combined_reports r
+    ) res
     WHERE 
-        -- Search Filter
-        (p_search = '' OR r.title ILIKE '%' || p_search || '%' OR r.description ILIKE '%' || p_search || '%')
-        -- Category Filter
-        AND (p_category = 'all' OR r.category = p_category)
-        -- Location Filter
-        AND (p_location = 'all' OR r.location_name = p_location)
-        -- Type/Tab Filter
+        res.raw_status NOT IN ('archived'::report_status_enum, 'completed'::report_status_enum)
+        AND (p_search = '' OR res.res_title ILIKE '%' || p_search || '%' OR res.res_description ILIKE '%' || p_search || '%')
+        AND (p_category = 'all' OR res.res_category = p_category)
+        AND (p_location = 'all' OR res.res_location_name = p_location)
         AND (
             p_type = 'all' 
-            OR (p_type = 'lost' AND r.report_type = 'lost')
-            OR (p_type = 'found' AND r.report_type = 'found')
-            OR (p_type = 'my-reports' AND r.creator_id = p_current_user_id)
+            OR (p_type = 'lost' AND res.res_report_type = 'lost')
+            OR (p_type = 'found' AND res.res_report_type = 'found')
+            OR (p_type = 'my-reports' AND res.res_creator_id = p_current_user_id)
         )
     ORDER BY 
-        CASE WHEN p_sort_order = 'newest' THEN r.reported_at END DESC,
-        CASE WHEN p_sort_order = 'oldest' THEN r.reported_at END ASC;
+        CASE WHEN p_sort_order = 'newest' THEN res.res_created_at END DESC,
+        CASE WHEN p_sort_order = 'oldest' THEN res.res_created_at END ASC;
 END;
 $$ LANGUAGE plpgsql;

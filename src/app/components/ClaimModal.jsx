@@ -15,17 +15,43 @@ import { Loader2, Send, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../supabase";
 
+const getClaimDraftKey = (report, userId) =>
+  `campus-lnf:claim-draft:${report?.type || "unknown"}:${report?.dbId || report?.id || "new"}:${userId}`;
+
 export function ClaimModal({ isOpen, onClose, report, userId }) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFiles, setImageFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const draftKey = getClaimDraftKey(report, userId);
 
   useEffect(() => {
     const newPreviews = imageFiles.map(file => URL.createObjectURL(file));
     setPreviews(newPreviews);
     return () => newPreviews.forEach(url => URL.revokeObjectURL(url));
   }, [imageFiles]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !report) return;
+
+    try {
+      const saved = window.localStorage.getItem(draftKey);
+      setMessage(saved || "");
+    } catch (error) {
+      console.error("Failed to restore claim draft:", error);
+    }
+  }, [draftKey, report]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !report) return;
+
+    if (!message.trim()) {
+      window.localStorage.removeItem(draftKey);
+      return;
+    }
+
+    window.localStorage.setItem(draftKey, message);
+  }, [draftKey, message, report]);
 
   const handleRemoveImage = (indexToRemove) => {
     setImageFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
@@ -93,6 +119,10 @@ export function ClaimModal({ isOpen, onClose, report, userId }) {
         throw new Error('Failed to send claim request');
       }
 
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(draftKey);
+      }
+
       toast.success(report.type === 'lost' ? 'Return report sent successfully!' : 'Claim request sent successfully!');
       setMessage("");
       setImageFiles([]);
@@ -107,10 +137,10 @@ export function ClaimModal({ isOpen, onClose, report, userId }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] p-0 overflow-hidden border-2 border-gray-200 flex flex-col">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] p-0 overflow-hidden border border-slate-200 flex flex-col">
         <DialogHeader className="p-6 pb-2 space-y-3">
           <DialogTitle className="text-2xl font-bold text-gray-900">
-            {report?.type === 'found' ? '🔍 Claim This Found Item' : '✨ I Found This Item'}
+            {report?.type === 'found' ? 'Claim This Found Item' : 'I Found This Item'}
           </DialogTitle>
           <DialogDescription className="text-base">
             {report?.type === 'found' 
@@ -137,8 +167,8 @@ export function ClaimModal({ isOpen, onClose, report, userId }) {
                 Upload Photos {report?.type === 'lost' && <span className="text-red-500">*</span>}
               </Label>
               <div 
-                className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-300 group cursor-pointer
-                  ${report?.type === 'lost' && imageFiles.length === 0 ? 'border-red-200 bg-red-50/30 hover:border-red-400' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/30'}`}
+                className={`group relative cursor-pointer rounded-xl border border-dashed p-6 transition-colors duration-200
+                  ${report?.type === 'lost' && imageFiles.length === 0 ? 'border-red-300 bg-red-50/40 hover:border-red-400' : 'border-slate-300 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50/50'}`}
                 onClick={() => document.getElementById('claim-images').click()}
               >
                 <Input
@@ -171,22 +201,22 @@ export function ClaimModal({ isOpen, onClose, report, userId }) {
               </div>
 
               {imageFiles.length > 0 && (
-                <div className="mt-4 grid grid-cols-4 gap-2 p-3 bg-gray-50 rounded-xl border-2 border-gray-100 animate-in fade-in duration-500">
+                <div className="mt-4 grid grid-cols-4 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 animate-in fade-in duration-500">
                   {imageFiles.map((file, index) => (
-                    <div key={index} className="relative aspect-square overflow-hidden rounded-lg group border-2 border-white shadow-md">
+                    <div key={index} className="group relative aspect-square overflow-hidden rounded-lg border border-white shadow-sm">
                       <img
                         src={previews[index]}
                         alt={`Preview ${index}`}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRemoveImage(index);
                           }}
-                          className="bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 hover:scale-110 transition-all shadow-lg"
+                          className="rounded-full bg-red-500 p-1.5 text-white shadow-sm transition hover:bg-red-600"
                         >
                           <X className="size-4" />
                         </button>
@@ -216,8 +246,8 @@ export function ClaimModal({ isOpen, onClose, report, userId }) {
               />
               <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-200">
                 {report?.type === 'found'
-                  ? "💡 Provide details to help the owner verify you're the rightful owner"
-                  : "💡 Provide details to help the owner identify their lost item"
+                  ? "Provide details to help the owner verify that you are the rightful owner."
+                  : "Provide details to help the owner identify their lost item."
                 }
               </p>
             </div>

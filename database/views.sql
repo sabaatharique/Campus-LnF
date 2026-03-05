@@ -84,7 +84,7 @@ SELECT
 FROM AllReports
 GROUP BY CUBE(report_type, status);
 
--- Query 3 (Grouping Sets): Lost vs. Found counts globally by month/year
+-- Query 3 (Grouping): Lost vs. Found counts globally by month/year
 CREATE OR REPLACE VIEW vw_monthly_trends AS
 WITH AllReports AS (
     SELECT 'Lost' AS report_type, EXTRACT(YEAR FROM lost_at) AS report_year, EXTRACT(MONTH FROM lost_at) AS report_month FROM Lost_Report
@@ -103,7 +103,7 @@ GROUP BY GROUPING SETS (
     ()
 );
 
--- Query 4 (Window Function): Average resolution time mapped by location and ranked
+-- Query 4 (Average): Average resolution time mapped by location and ranked
 CREATE OR REPLACE VIEW vw_report_resolution_time AS
 WITH CompletedReports AS (
     SELECT l.name AS location_name, EXTRACT(EPOCH FROM (cr.claimed_at - fr.found_at))/3600 AS resolution_hours

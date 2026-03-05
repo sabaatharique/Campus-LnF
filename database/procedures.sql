@@ -291,22 +291,9 @@ $$;
 CREATE OR REPLACE PROCEDURE reject_claim_request(p_claim_id INT)
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    v_requester_id INT;
-    v_item_title VARCHAR(50);
-    v_owner_name VARCHAR(100);
 BEGIN
-    -- Get request details
-    SELECT cr.requester_id, fr.title, u.name 
-    INTO v_requester_id, v_item_title, v_owner_name
-    FROM Claim_Request cr
-    JOIN Found_Report fr ON cr.found_report_id = fr.found_id
-    JOIN Users u ON fr.creator_id = u.user_id
-    WHERE cr.claim_id = p_claim_id;
-
     -- Update request status
     UPDATE Claim_Request SET status = 'rejected' WHERE claim_id = p_claim_id;
-
 END;
 $$;
 

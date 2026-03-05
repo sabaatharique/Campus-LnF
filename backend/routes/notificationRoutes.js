@@ -11,7 +11,58 @@ router.get('/user/:userId', async (req, res) => {
       'SELECT * FROM get_user_notifications($1)',
       [userId]
     );
-    res.json(result.rows);
+
+    const notifications = result.rows;
+    const claimIds = [...new Set(
+      notifications
+        .map((n) => n.claim_id)
+        .filter((id) => id !== null && id !== undefined)
+    )];
+    const returnIds = [...new Set(
+      notifications
+        .map((n) => n.return_id)
+        .filter((id) => id !== null && id !== undefined)
+    )];
+
+    let claimRequesterMap = new Map();
+    let returnRequesterMap = new Map();
+
+    if (claimIds.length > 0) {
+      const claimResult = await pool.query(
+        'SELECT claim_id, requester_id FROM Claim_Request WHERE claim_id = ANY($1::INT[])',
+        [claimIds]
+      );
+      claimRequesterMap = new Map(
+        claimResult.rows.map((row) => [row.claim_id, row.requester_id])
+      );
+    }
+
+    if (returnIds.length > 0) {
+      const returnResult = await pool.query(
+        'SELECT return_id, requester_id FROM Return_Request WHERE return_id = ANY($1::INT[])',
+        [returnIds]
+      );
+      returnRequesterMap = new Map(
+        returnResult.rows.map((row) => [row.return_id, row.requester_id])
+      );
+    }
+
+    const enrichedNotifications = notifications.map((notification) => {
+      let requesterId = null;
+
+      if (notification.claim_id !== null && notification.claim_id !== undefined) {
+        requesterId = claimRequesterMap.get(notification.claim_id) ?? null;
+      } else if (notification.return_id !== null && notification.return_id !== undefined) {
+        requesterId = returnRequesterMap.get(notification.return_id) ?? null;
+      }
+
+      return {
+        ...notification,
+        requester_id: requesterId,
+      };
+    });
+
+    res.json(enrichedNotifications);
   } catch (err) {
     console.error('Error fetching notifications:', err);
     res.status(500).json({ error: err.message });

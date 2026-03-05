@@ -9,6 +9,7 @@ import {
   MapPin,
   MessageSquare,
   Check,
+  User,
 } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge.jsx";
 import {
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/app/components/ui/dialog.jsx";
+import { ReporterProfileModal } from "@/app/components/ReporterProfileModal.jsx";
 import { toast } from "sonner";
 
 export function NotificationPanel({ userId }) {
@@ -26,6 +28,8 @@ export function NotificationPanel({ userId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedRequesterId, setSelectedRequesterId] = useState(null);
+  const [isRequesterProfileOpen, setIsRequesterProfileOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const fetchNotifications = async () => {
@@ -153,6 +157,18 @@ export function NotificationPanel({ userId }) {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const isAutoMatch = (n) => !!(n.matched_found_id || n.matched_lost_id);
+  const hasRequesterProfile = (n) =>
+    !isAutoMatch(n) && (n?.claim_id || n?.return_id) && n?.requester_id;
+
+  const openRequesterProfile = (notification) => {
+    if (!notification?.requester_id) {
+      toast.error("Requester profile is unavailable for this notification.");
+      return;
+    }
+
+    setSelectedRequesterId(notification.requester_id);
+    setIsRequesterProfileOpen(true);
+  };
 
   return (
     <>
@@ -215,6 +231,20 @@ export function NotificationPanel({ userId }) {
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
+                        {hasRequesterProfile(notification) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 hover:bg-indigo-100 hover:text-indigo-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openRequesterProfile(notification);
+                            }}
+                            title="View requester profile"
+                          >
+                            <User className="size-4" />
+                          </Button>
+                        )}
                         {!notification.is_read && (
                           (notification.claim_id || notification.return_id) && notification.request_status === 'pending' ? (
                             <>
@@ -351,6 +381,17 @@ export function NotificationPanel({ userId }) {
                 <p className="text-sm text-gray-700 mt-1.5">
                   {selectedNotification.requester_message || "No message provided."}
                 </p>
+                {hasRequesterProfile(selectedNotification) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => openRequesterProfile(selectedNotification)}
+                  >
+                    <User className="size-4 mr-2" />
+                    View Requester Profile
+                  </Button>
+                )}
               </div>
               )}
 
@@ -397,6 +438,15 @@ export function NotificationPanel({ userId }) {
           )}
 
           <DialogFooter className="gap-2">
+            {selectedNotification && hasRequesterProfile(selectedNotification) && (
+              <Button
+                variant="outline"
+                onClick={() => openRequesterProfile(selectedNotification)}
+              >
+                <User className="size-4 mr-2" />
+                View Requester Profile
+              </Button>
+            )}
             {selectedNotification && !selectedNotification.is_read && (
               // Auto-match notifications only get Mark as Read
               isAutoMatch(selectedNotification) ? (
@@ -452,6 +502,15 @@ export function NotificationPanel({ userId }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReporterProfileModal
+        isOpen={isRequesterProfileOpen}
+        onClose={() => {
+          setIsRequesterProfileOpen(false);
+          setSelectedRequesterId(null);
+        }}
+        userId={selectedRequesterId}
+      />
     </>
   );
 }

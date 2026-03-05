@@ -9,6 +9,20 @@ import { Calendar, Upload, Loader2, X } from "lucide-react";
 import { supabase } from "../../supabase";
 import { toast } from "sonner";
 
+const getDraftKey = (type, userId) => `campus-lnf:report-draft:${type}:${userId}`;
+
+const readDraft = (draftKey) => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const saved = window.localStorage.getItem(draftKey);
+    return saved ? JSON.parse(saved) : null;
+  } catch (error) {
+    console.error("Failed to restore report draft:", error);
+    return null;
+  }
+};
+
 export function ReportForm({ type, userId, onSubmit, onCancel }) {
   const [itemName, setItemName] = useState("");
   const [category, setCategory] = useState("");
@@ -20,6 +34,7 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
   const [locations, setLocations] = useState([]);
   const [tags, setTags] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const draftKey = getDraftKey(type, userId);
 
   useEffect(() => {
     // Generate previews when imageFiles changes
@@ -31,6 +46,37 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
       newPreviews.forEach(url => URL.revokeObjectURL(url));
     };
   }, [imageFiles]);
+
+  useEffect(() => {
+    const draft = readDraft(draftKey);
+    if (draft) {
+      setItemName(draft.itemName || "");
+      setCategory(draft.category || "");
+      setDescription(draft.description || "");
+      setLocation(draft.location || "");
+      setDate(draft.date || "");
+    } else {
+      setItemName("");
+      setCategory("");
+      setDescription("");
+      setLocation("");
+      setDate("");
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const draftPayload = { itemName, category, description, location, date };
+    const hasContent = Object.values(draftPayload).some((value) => Boolean(value));
+
+    if (!hasContent) {
+      window.localStorage.removeItem(draftKey);
+      return;
+    }
+
+    window.localStorage.setItem(draftKey, JSON.stringify(draftPayload));
+  }, [draftKey, itemName, category, description, location, date]);
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -119,6 +165,10 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
         throw new Error(data.error || 'Failed to create report');
       }
 
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(draftKey);
+      }
+
       // Success - immediately call onSubmit without waiting
       onSubmit(report);
     } catch (err) {
@@ -129,7 +179,7 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
   };
 
   return (
-    <Card className="max-w-2xl mx-auto">
+    <Card className="mx-auto w-full max-w-2xl border-slate-200">
       <CardHeader>
         <CardTitle>
           {type === "lost" ? "Report Lost Item" : "Report Found Item"}
@@ -144,13 +194,13 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
         <form onSubmit={handleSubmit} className="space-y-4">
 
           <div className="space-y-3">
-            <Label htmlFor="images" className="text-base font-semibold flex items-center gap-2">
-              <Upload className="size-4 text-blue-600" />
+            <Label htmlFor="images" className="flex items-center gap-2 text-base font-semibold">
+              <Upload className="size-4 text-primary" />
               Item Images {type === 'found' && <span className="text-red-500">*</span>}
             </Label>
             <div 
-              className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-300 group cursor-pointer
-                ${type === 'found' && imageFiles.length === 0 ? 'border-red-200 bg-red-50/30 hover:border-red-400' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/30'}`}
+              className={`group relative cursor-pointer rounded-xl border border-dashed p-6 transition-colors duration-200
+                ${type === 'found' && imageFiles.length === 0 ? 'border-red-300 bg-red-50/40 hover:border-red-400' : 'border-slate-300 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50/50'}`}
               onClick={() => document.getElementById('images').click()}
             >
               <Input
@@ -166,39 +216,39 @@ export function ReportForm({ type, userId, onSubmit, onCancel }) {
                 accept="image/*"
               />
               <div className="flex flex-col items-center justify-center gap-2 text-center">
-                <div className={`p-4 rounded-full transition-colors ${type === 'found' && imageFiles.length === 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                  <Upload className="size-8" />
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-lg">
-                    Click to upload images
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1.5 max-w-xs mx-auto">
-                    {type === 'found' 
-                      ? "Found items MUST have at least one clear image for verification" 
-                      : "Add clear photos to help people recognize the item"}
+                  <div className={`rounded-full p-4 transition-colors ${type === 'found' && imageFiles.length === 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                    <Upload className="size-8" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-slate-900">
+                      Click to upload images
+                    </p>
+                    <p className="mx-auto mt-1.5 max-w-xs text-sm text-slate-500">
+                      {type === 'found' 
+                        ? "Found items MUST have at least one clear image for verification" 
+                        : "Add clear photos to help people recognize the item"}
                   </p>
                 </div>
               </div>
             </div>
 
             {imageFiles.length > 0 && (
-              <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 p-4 bg-gray-50 rounded-xl border-2 border-gray-100 animate-in fade-in duration-500">
+              <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-4 md:grid-cols-5 animate-in fade-in duration-500">
                 {imageFiles.map((file, index) => (
-                  <div key={index} className="relative aspect-square overflow-hidden rounded-lg group border-2 border-white shadow-md hover:shadow-xl transition-all duration-300">
+                  <div key={index} className="group relative aspect-square overflow-hidden rounded-lg border border-white shadow-sm transition-all duration-200 hover:shadow-md">
                     <img
                       src={previews[index]}
                       alt={`Preview ${index}`}
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveImage(index);
                         }}
-                        className="bg-red-500 text-white rounded-full p-2 hover:bg-red-600 hover:scale-110 transition-all shadow-lg active:scale-95"
+                        className="rounded-full bg-red-500 p-2 text-white shadow-sm transition hover:bg-red-600 active:scale-95"
                       >
                         <X className="size-5" />
                       </button>

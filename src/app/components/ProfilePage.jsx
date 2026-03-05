@@ -7,6 +7,19 @@ import { ItemDetailModal } from "@/app/components/ItemDetailModal.jsx";
 import { ArrowLeft, User, Mail, Phone, IdCard, Pencil, Save, X, Package, ClipboardList, HandHeart, RotateCcw, Search, Archive, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
+const getProfileHistoryFilterKey = (userId) => `campus-lnf:profile-history-filter:${userId}`;
+
+const readProfileHistoryFilter = (userId) => {
+  if (typeof window === "undefined") return "all";
+
+  try {
+    const saved = window.localStorage.getItem(getProfileHistoryFilterKey(userId));
+    return saved || "all";
+  } catch {
+    return "all";
+  }
+};
+
 const TYPE_CONFIG = {
   lost: {
     label: "Lost Report",
@@ -77,7 +90,7 @@ export function ProfilePage({ user, onBack, onUpdateUser }) {
   const [saving, setSaving] = useState(false);
 
   // history filter & modal
-  const [historyFilter, setHistoryFilter] = useState("all");
+  const [historyFilter, setHistoryFilter] = useState(() => readProfileHistoryFilter(user.id));
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
   // Map a history row → the shape ItemDetailModal expects
@@ -104,6 +117,11 @@ export function ProfilePage({ user, onBack, onUpdateUser }) {
     fetchProfile();
     fetchHistory();
   }, [user.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(getProfileHistoryFilterKey(user.id), historyFilter);
+  }, [user.id, historyFilter]);
 
   const fetchProfile = async () => {
     try {

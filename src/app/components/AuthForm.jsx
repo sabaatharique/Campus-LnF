@@ -1,186 +1,234 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs.jsx";
 import { supabase } from "../../supabase";
 
+const AUTH_UI_STORAGE_KEY = "campus-lnf:auth-ui";
+
+const readAuthUiState = () => {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const saved = window.localStorage.getItem(AUTH_UI_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch (error) {
+    console.error("Failed to restore auth state:", error);
+    return {};
+  }
+};
+
+const persistAuthUiState = (state) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(AUTH_UI_STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error("Failed to persist auth state:", error);
+  }
+};
+
 export function AuthForm({ onLogin }) {
-  const [loginEmail, setLoginEmail] = useState("");
+  const [storedAuthUi] = useState(() => readAuthUiState());
+  const [loginEmail, setLoginEmail] = useState(() => storedAuthUi.loginEmail ?? "");
   const [loginPassword, setLoginPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupName, setSignupName] = useState("");
   const [signupStudentId, setSignupStudentId] = useState("");
   const [signupContact, setSignupContact] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("login");
+  const [activeTab, setActiveTab] = useState(() => storedAuthUi.activeTab ?? "login");
+  const [status, setStatus] = useState(null);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
+  useEffect(() => {
+    persistAuthUiState({ activeTab, loginEmail });
+  }, [activeTab, loginEmail]);
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setStatus(null);
 
     try {
-      // console.log('Attempting login with:', { user_email: loginEmail, user_password: loginPassword });
-      const { data, error } = await supabase.rpc('user_login', {
+      const { data, error } = await supabase.rpc("user_login", {
         user_email: loginEmail,
         user_password: loginPassword,
       });
 
-       // console.log('RPC Response - Data:', data);
-       // console.log('RPC Response - Error:', error);
-
       if (error) {
-        setError(error.message);
+        setStatus({ type: "error", message: error.message });
         return;
       }
 
       if (data && data.length > 0 && data[0].success) {
-        // Fetch user profile to get name for the session
         try {
           const profileRes = await fetch(`http://localhost:3000/api/users/${data[0].user_id}`);
           const profileData = profileRes.ok ? await profileRes.json() : {};
-          onLogin({ id: data[0].user_id, email: loginEmail, name: profileData.name || '' });
+          onLogin({
+            id: data[0].user_id,
+            email: loginEmail.trim(),
+            name: profileData.name || "",
+          });
         } catch {
-          onLogin({ id: data[0].user_id, email: loginEmail, name: '' });
+          onLogin({
+            id: data[0].user_id,
+            email: loginEmail.trim(),
+            name: "",
+          });
         }
       } else {
-        setError(data && data.length > 0 ? data[0].message : 'Invalid email or password.');
-        // console.log('Login failed:', data && data.length > 0 ? data[0].message : 'Invalid email or password');
+        setStatus({
+          type: "error",
+          message: data && data.length > 0 ? data[0].message : "Invalid email or password.",
+        });
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      setStatus({ type: "error", message: error.message });
     }
   };
 
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    setError("");
+  const handleSignup = async (event) => {
+    event.preventDefault();
+    setStatus(null);
 
     if (!signupEmail || !signupName || !signupStudentId || !signupContact || !signupPassword) {
-      setError("All fields are required");
+      setStatus({ type: "error", message: "All fields are required." });
       return;
     }
 
-    const parsedStudentId = parseInt(signupStudentId, 10);
-    if (isNaN(parsedStudentId)) {
-      setError("Student ID must be a valid number.");
+    const parsedStudentId = Number.parseInt(signupStudentId, 10);
+    if (Number.isNaN(parsedStudentId)) {
+      setStatus({ type: "error", message: "Student ID must be a valid number." });
       return;
     }
 
-    const parsedContact = parseInt(signupContact, 10);
-    if (isNaN(parsedContact)) {
-      setError("Contact Number must be a valid number.");
+    const parsedContact = Number.parseInt(signupContact, 10);
+    if (Number.isNaN(parsedContact)) {
+      setStatus({ type: "error", message: "Contact number must be a valid number." });
       return;
     }
 
     try {
-      const { data, error } = await supabase.rpc('user_signup', {
-        user_name: signupName,
+      const { error } = await supabase.rpc("user_signup", {
+        user_name: signupName.trim(),
         user_contact: parsedContact,
-        user_email: signupEmail,
-        user_student_id: parsedStudentId, 
+        user_email: signupEmail.trim(),
+        user_student_id: parsedStudentId,
         user_password: signupPassword,
       });
 
       if (error) {
-        setError(error.message);
+        setStatus({ type: "error", message: error.message });
         return;
       }
 
-      // If signup is successful, move to the login tab and clear signup form
       setSignupName("");
       setSignupEmail("");
       setSignupStudentId("");
       setSignupContact("");
       setSignupPassword("");
-      setError("Signup successful! Please log in.");
+      setStatus({ type: "success", message: "Signup complete. You can log in now." });
       setActiveTab("login");
-
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      setStatus({ type: "error", message: error.message });
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Campus Lost & Found</CardTitle>
-          <CardDescription>
-            Secure system for lost and found items on campus
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+    <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-36px_rgba(12,30,66,0.45)] sm:p-8">
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-slate-900">Campus Lost & Found</h1>
+          <p className="mt-2 text-sm text-slate-600">Sign in to continue</p>
+        </div>
 
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="student@university.edu"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <Button type="submit" className="w-full">
-                  Login
-                </Button>
-              </form>
-            </TabsContent>
+        <Tabs
+          value={activeTab}
+          onValueChange={(nextTab) => {
+            setActiveTab(nextTab);
+            setStatus(null);
+          }}
+        >
+          <TabsList className="grid h-11 w-full grid-cols-2 rounded-lg bg-slate-100 p-1">
+            <TabsTrigger value="login">Login</TabsTrigger>
+            <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="student@university.edu"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    required
-                  />
-                </div>
+          <TabsContent value="login" className="pt-4">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="login-email">Email</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  placeholder="student@university.edu"
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Password</Label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  required
+                />
+              </div>
+
+              {status && (
+                <p
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    status.type === "error"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {status.message}
+                </p>
+              )}
+
+              <Button type="submit" className="w-full">
+                Login
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="signup" className="pt-4">
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="signup-name">Full Name</Label>
+                <Input
+                  id="signup-name"
+                  type="text"
+                  placeholder="Jane Doe"
+                  value={signupName}
+                  onChange={(event) => setSignupName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signup-email">Email</Label>
+                <Input
+                  id="signup-email"
+                  type="email"
+                  placeholder="student@university.edu"
+                  value={signupEmail}
+                  onChange={(event) => setSignupEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="signup-contact">Contact Number</Label>
                   <Input
                     id="signup-contact"
                     type="number"
-                    placeholder="e.g., 1234567890"
+                    placeholder="e.g. 1712345678"
                     value={signupContact}
-                    onChange={(e) => setSignupContact(e.target.value)}
+                    onChange={(event) => setSignupContact(event.target.value)}
                     required
                   />
                 </div>
@@ -188,32 +236,44 @@ export function AuthForm({ onLogin }) {
                   <Label htmlFor="signup-student-id">Student ID</Label>
                   <Input
                     id="signup-student-id"
-                    type="text"
-                    placeholder="S12345678"
+                    type="number"
+                    placeholder="e.g. 20231234"
                     value={signupStudentId}
-                    onChange={(e) => setSignupStudentId(e.target.value)}
+                    onChange={(event) => setSignupStudentId(event.target.value)}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <Button type="submit" className="w-full">
-                  Sign Up
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signup-password">Password</Label>
+                <Input
+                  id="signup-password"
+                  type="password"
+                  value={signupPassword}
+                  onChange={(event) => setSignupPassword(event.target.value)}
+                  required
+                />
+              </div>
+
+              {status && (
+                <p
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    status.type === "error"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {status.message}
+                </p>
+              )}
+
+              <Button type="submit" className="w-full">
+                Create Account
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

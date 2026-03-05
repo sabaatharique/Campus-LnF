@@ -43,7 +43,7 @@ router.get('/user/claims/:userId', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM get_user_claim_requests($1)',
-      [userId]
+      [parseInt(userId)]
     );
     res.json(result.rows);
   } catch (err) {
@@ -59,7 +59,7 @@ router.get('/user/returns/:userId', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM get_user_return_requests($1)',
-      [userId]
+      [parseInt(userId)]
     );
     res.json(result.rows);
   } catch (err) {
@@ -68,35 +68,13 @@ router.get('/user/returns/:userId', async (req, res) => {
   }
 });
 
-// ACCEPT CLAIM REQUEST
-router.post('/:claimId/accept', async (req, res) => {
-  const { claimId } = req.params;
-  try {
-    await pool.query('CALL accept_claim_request($1)', [claimId]);
-    res.json({ message: 'Claim request accepted' });
-  } catch (err) {
-    console.error('Error accepting claim request:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// REJECT CLAIM REQUEST
-router.post('/:claimId/reject', async (req, res) => {
-  const { claimId } = req.params;
-  try {
-    await pool.query('CALL reject_claim_request($1)', [claimId]);
-    res.json({ message: 'Claim request rejected' });
-  } catch (err) {
-    console.error('Error rejecting claim request:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// --- SPECIFIC ROUTES FIRST ---
 
 // ACCEPT RETURN REQUEST
 router.post('/returns/:returnId/accept', async (req, res) => {
   const { returnId } = req.params;
   try {
-    await pool.query('CALL accept_return_request($1)', [returnId]);
+    await pool.query('CALL accept_return_request($1)', [parseInt(returnId)]);
     res.json({ message: 'Return request accepted' });
   } catch (err) {
     console.error('Error accepting return request:', err);
@@ -108,10 +86,36 @@ router.post('/returns/:returnId/accept', async (req, res) => {
 router.post('/returns/:returnId/reject', async (req, res) => {
   const { returnId } = req.params;
   try {
-    await pool.query('CALL reject_return_request($1)', [returnId]);
+    await pool.query('CALL reject_return_request($1)', [parseInt(returnId)]);
     res.json({ message: 'Return request rejected' });
   } catch (err) {
     console.error('Error rejecting return request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- GENERIC PARAMETER ROUTES LAST ---
+
+// ACCEPT CLAIM REQUEST
+router.post('/:claimId/accept', async (req, res) => {
+  const { claimId } = req.params;
+  try {
+    await pool.query('CALL accept_claim_request($1)', [parseInt(claimId)]);
+    res.json({ message: 'Claim request accepted' });
+  } catch (err) {
+    console.error('Error accepting claim request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// REJECT CLAIM REQUEST
+router.post('/:claimId/reject', async (req, res) => {
+  const { claimId } = req.params;
+  try {
+    await pool.query('CALL reject_claim_request($1)', [parseInt(claimId)]);
+    res.json({ message: 'Claim request rejected' });
+  } catch (err) {
+    console.error('Error rejecting claim request:', err);
     res.status(500).json({ error: err.message });
   }
 });
